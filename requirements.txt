@@ -1,0 +1,8 @@
+os
+numpy
+scipy
+skimage - scikit-image
+cv2 - opencv
+tqdm
+torch - pytorch
+colorizers - rz-colorization
