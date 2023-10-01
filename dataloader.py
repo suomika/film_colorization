@@ -16,9 +16,12 @@ def get_all_image_paths(dataset_path, subdir, res, method):
     col_path = os.path.join(dataset_path, subdir, res)
     gray_path = os.path.join(dataset_path, subdir, res + '_gray')
 
-    if method == 'deepflow':
+    if method == 'deepflow' or method == 'farneback':
         flow_path = os.path.join(dataset_path, subdir, 'flow', res + '_' + method)
-
+    
+    elif method == 'noflow':
+        flow_path = None
+        
     else: raise ValueError('This method is not defined!')
 
     return col_path, gray_path, flow_path
@@ -182,6 +185,75 @@ class CustomImageDataset(Dataset):
         return input, output
     
 
+class FrameGapImageDataset(CustomImageDataset):
+    # pytorch dataset class for loading images from the DAVIS dataset
+    # with a specified frame gap between input and output frames
+    def __init__(self, dataset_path, subdir, res, method, use_flow=False, train=True, frame_steps=[1]):
+        super().__init__(dataset_path, subdir, res, method, use_flow, train)
+        self.frame_steps = frame_steps
+
+        for vid in self.vid_labels:
+            for step in self.frame_steps:
+                assert self.vid_lengths[vid] - (step - 1) > 0
+            self.vid_lengths[vid] += 1
+
+    def __len__(self):
+        length = 0
+        for step in self.frame_steps:
+            for vid in self.vid_labels:
+                length += self.vid_lengths[vid] - step
+        return length
+
+    def __idx_to_vid__(self, idx):
+        for step in self.frame_steps:
+            for vid in self.vid_labels:
+                if idx < self.vid_lengths[vid] - step:
+                    return vid, idx, step
+                else:
+                    idx -= self.vid_lengths[vid] - step
+        raise IndexError('Index out of range')
+    
+    def __getitem__(self, idx, verbose=False):
+        vid_label, frame_idx, step = self.__idx_to_vid__(idx)
+        frame_idx += step
+
+        col_dir = os.path.join(self.col_dir, vid_label)
+        gray_dir = os.path.join(self.gray_dir, vid_label)
+        flow_dir = os.path.join(self.flow_dir, vid_label)
+        if step != 1:
+            flow_dir = os.path.join(self.flow_dir + '_step_' + str(step), vid_label)
+
+        col_frame = os.path.join(col_dir, str(frame_idx).zfill(5) + '.jpg')
+        col_prev_frame = os.path.join(col_dir, str(frame_idx-step).zfill(5) + '.jpg')
+        gray_frame = os.path.join(gray_dir, str(frame_idx).zfill(5) + '.jpg')
+        flow_frame = os.path.join(flow_dir, str(frame_idx).zfill(5) + '.jpg.npy')
+        
+        if verbose:
+            print('col_frame: {}'.format(col_frame))
+            print('gray_frame: {}'.format(gray_frame))
+            print('flow_frame: {}'.format(flow_frame))
+
+        col_img = imread(col_frame)
+        col_prev_img = imread(col_prev_frame)
+        gray_img = imread(gray_frame)
+        flow_img = np.load(flow_frame)
+
+        sample = {
+            'col_img': col_img,
+            'col_prev_img': col_prev_img,
+            'gray_img': gray_img,
+            'flow_img': flow_img
+        }
+
+        col_img, col_prev_img, gray_img, flow_img = images_to_tensor(sample)
+        col_img, col_prev_img, gray_img, flow_img = images_normalize(col_img, col_prev_img, gray_img, flow_img)
+        input = self.__input_concat__(col_prev_img, gray_img, flow_img)
+        output = self.__target_concat__(col_img)
+        input = torch.transpose(input, 0, 2)
+        output = torch.transpose(output, 0, 2)
+
+        return input, output
+
 def data_to_images(input, output, use_flow=False, input_only=False):
     # create viewable rgb images from NN input and output tensors
     # use_flow: if true, input has 6 channels, else 4
@@ -199,7 +271,7 @@ def data_to_images(input, output, use_flow=False, input_only=False):
         grey_img = input.numpy()[:, :, 3:4]
     
     col_img  = (col_img*255).astype(np.uint8)
-    col_image = cv2.cvtColor(col_img, cv2.COLOR_LAB2BGR)
+    col_image = cv2.cvtColor(col_img, cv2.COLOR_LAB2RGB)
 
     if not input_only:
         output = output.numpy()
@@ -209,7 +281,7 @@ def data_to_images(input, output, use_flow=False, input_only=False):
         lab[:,:,1] = output[:,:,0]
         lab[:,:,2] = output[:,:,1]
         lab = lab.astype(np.uint8)
-        pred_rgb = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
+        pred_rgb = cv2.cvtColor(lab, cv2.COLOR_LAB2RGB)
 
     if input_only:
         if use_flow:
