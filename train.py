@@ -72,7 +72,7 @@ def validate(model, dataloader, loss_fn):
     return val_loss
 
 
-def train(train_data, val_data, architecture, method, flow, lr, batch_size, gamma, save_model, epochs, model_path):
+def train(train_data, val_data, architecture, method, flow, lr, batch_size, gamma, save_model, epochs, model_path, resume_training=False):
     """
 
     :param train_data:
@@ -111,6 +111,20 @@ def train(train_data, val_data, architecture, method, flow, lr, batch_size, gamm
         model = BigAutoencoder(n_input_channels=n_input_channels)
 
     else: raise ValueError('This architecture is not defined!')
+    
+    start_epoch = 1
+    if resume_training:
+        print('Resuming training...')
+        print(f'Checkpoint path: {checkpoint_path}')
+        weights = os.listdir(checkpoint_path)
+        weights.sort()
+        weights = [weight for weight in weights if weight.endswith('.pth')]
+        filename = weights[-1]
+        start_epoch = int(filename.split('_')[-1].split('.')[0])
+        print(f'Loading weights from {filename}')
+        print(f'Starting from epoch {start_epoch}')
+        resume(model, checkpoint_path, filename)
+
 
     model.to(device)
 
@@ -122,7 +136,7 @@ def train(train_data, val_data, architecture, method, flow, lr, batch_size, gamm
     val_dataloader = DataLoader(val_data, batch_size=batch_size, shuffle=True)
 
     train_loss, val_loss = [], []
-    for epoch in range(1, epochs + 1):
+    for epoch in range(start_epoch, epochs + 1):
         print(f'Epoch {epoch}\n-------------------------------')
 
         train_loss.append(train_loop(train_dataloader, model, loss_fn, optimizer))
