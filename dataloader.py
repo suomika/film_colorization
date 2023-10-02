@@ -7,6 +7,7 @@ from torch.utils.data import Dataset
 from cv2 import imread
 from cv2 import cvtColor
 
+
 # Contains functions for loading data from the DAVIS dataset:
 # 1. CustomImageDataset: pytorch dataset class for loading images from the DAVIS dataset
 # 2. images_to_tensor, images_normalize, input_concat, target_concat: helper functions
@@ -16,10 +17,14 @@ def get_all_image_paths(dataset_path, subdir, res, method):
     col_path = os.path.join(dataset_path, subdir, res)
     gray_path = os.path.join(dataset_path, subdir, res + '_gray')
 
-    if method == 'deepflow':
+    if method == 'deepflow' or method == 'farneback':
         flow_path = os.path.join(dataset_path, subdir, 'flow', res + '_' + method)
 
-    else: raise ValueError('This method is not defined!')
+    elif method == 'noflow':
+        flow_path = None
+
+    else:
+        raise ValueError('This method is not defined!')
 
     return col_path, gray_path, flow_path
 
@@ -44,11 +49,11 @@ def images_to_tensor(sample):
 def images_normalize(col_img, col_prev_img, gray_img, flow_img):
     # Normalize images to [0,1] for NN
     # flow values divided by 40 to be vaguely within +- 1
-    col_img = torch.mul(col_img, 1/255)
-    col_prev_img = torch.mul(col_prev_img, 1/255)
-    gray_img = torch.mul(gray_img, 1/255)
+    col_img = torch.mul(col_img, 1 / 255)
+    col_prev_img = torch.mul(col_prev_img, 1 / 255)
+    gray_img = torch.mul(gray_img, 1 / 255)
     if flow_img is not None:
-        flow_img = torch.mul(flow_img, 1/40)
+        flow_img = torch.mul(flow_img, 1 / 40)
 
     return col_img, col_prev_img, gray_img, flow_img
 
@@ -57,26 +62,26 @@ def input_concat(col_prev_img, gray_img, flow_img):
     # Concatenate images to form NN input
     if flow_img is not None:
         input_tens = torch.cat((
-            torch.unsqueeze(col_prev_img[...,0], dim=2), # L channel
-            torch.unsqueeze(col_prev_img[...,1], dim=2), # A channel
-            torch.unsqueeze(col_prev_img[...,2], dim=2), # B channel
-            torch.unsqueeze(flow_img[...,0], dim=2),    # x flow
-            torch.unsqueeze(flow_img[...,1], dim=2),    # y flow
-            torch.unsqueeze(gray_img[...,0], dim=2)     # L channel
-            ),dim=2)
+            torch.unsqueeze(col_prev_img[..., 0], dim=2),  # L channel
+            torch.unsqueeze(col_prev_img[..., 1], dim=2),  # A channel
+            torch.unsqueeze(col_prev_img[..., 2], dim=2),  # B channel
+            torch.unsqueeze(flow_img[..., 0], dim=2),  # x flow
+            torch.unsqueeze(flow_img[..., 1], dim=2),  # y flow
+            torch.unsqueeze(gray_img[..., 0], dim=2)  # L channel
+        ), dim=2)
     else:
         input_tens = torch.cat((
-            torch.unsqueeze(col_prev_img[...,0], dim=2), # L channel
-            torch.unsqueeze(col_prev_img[...,1], dim=2), # A channel
-            torch.unsqueeze(col_prev_img[...,2], dim=2), # B channel
-            torch.unsqueeze(gray_img[...,0], dim=2)     # L channel
-            ),dim=2)
+            torch.unsqueeze(col_prev_img[..., 0], dim=2),  # L channel
+            torch.unsqueeze(col_prev_img[..., 1], dim=2),  # A channel
+            torch.unsqueeze(col_prev_img[..., 2], dim=2),  # B channel
+            torch.unsqueeze(gray_img[..., 0], dim=2)  # L channel
+        ), dim=2)
     return input_tens
 
 
 def target_concat(col_img):
     # slice LAB color image to get AB channels for NN target/ground truth
-    target_tens = col_img[...,1:]
+    target_tens = col_img[..., 1:]
     return target_tens
 
 
@@ -118,28 +123,28 @@ class CustomImageDataset(Dataset):
             else:
                 idx -= self.vid_lengths[vid]
         raise IndexError('Index out of range')
-    
+
     def __input_concat__(self, col_prev_img, gray_img, flow_img):
         if self.use_flow:
             input_tens = torch.cat((
-                torch.unsqueeze(col_prev_img[...,0], dim=2), # L channel
-                torch.unsqueeze(col_prev_img[...,1], dim=2), # A channel
-                torch.unsqueeze(col_prev_img[...,2], dim=2), # B channel
-                torch.unsqueeze(flow_img[...,0], dim=2),     # x flow
-                torch.unsqueeze(flow_img[...,1], dim=2),     # y flow
-                torch.unsqueeze(gray_img[...,0], dim=2)      # L channel
-                ),dim=2)
+                torch.unsqueeze(col_prev_img[..., 0], dim=2),  # L channel
+                torch.unsqueeze(col_prev_img[..., 1], dim=2),  # A channel
+                torch.unsqueeze(col_prev_img[..., 2], dim=2),  # B channel
+                torch.unsqueeze(flow_img[..., 0], dim=2),  # x flow
+                torch.unsqueeze(flow_img[..., 1], dim=2),  # y flow
+                torch.unsqueeze(gray_img[..., 0], dim=2)  # L channel
+            ), dim=2)
         else:
             input_tens = torch.cat((
-                torch.unsqueeze(col_prev_img[...,0], dim=2), # L channel
-                torch.unsqueeze(col_prev_img[...,1], dim=2), # A channel
-                torch.unsqueeze(col_prev_img[...,2], dim=2), # B channel
-                torch.unsqueeze(gray_img[...,0], dim=2)      # L channel
-                ),dim=2)
+                torch.unsqueeze(col_prev_img[..., 0], dim=2),  # L channel
+                torch.unsqueeze(col_prev_img[..., 1], dim=2),  # A channel
+                torch.unsqueeze(col_prev_img[..., 2], dim=2),  # B channel
+                torch.unsqueeze(gray_img[..., 0], dim=2)  # L channel
+            ), dim=2)
         return input_tens
 
     def __target_concat__(self, col_img):
-        target_tens = col_img[...,1:]
+        target_tens = col_img[..., 1:]
         return target_tens
 
     def __getitem__(self, idx, verbose=False):
@@ -151,10 +156,10 @@ class CustomImageDataset(Dataset):
         flow_dir = os.path.join(self.flow_dir, vid_label)
 
         col_frame = os.path.join(col_dir, str(frame_idx).zfill(5) + '.jpg')
-        col_prev_frame = os.path.join(col_dir, str(frame_idx-1).zfill(5) + '.jpg')
+        col_prev_frame = os.path.join(col_dir, str(frame_idx - 1).zfill(5) + '.jpg')
         gray_frame = os.path.join(gray_dir, str(frame_idx).zfill(5) + '.jpg')
         flow_frame = os.path.join(flow_dir, str(frame_idx).zfill(5) + '.jpg.npy')
-        
+
         if verbose:
             print('col_frame: {}'.format(col_frame))
             print('gray_frame: {}'.format(gray_frame))
@@ -180,7 +185,77 @@ class CustomImageDataset(Dataset):
         output = torch.transpose(output, 0, 2)
 
         return input, output
-    
+
+
+class FrameGapImageDataset(CustomImageDataset):
+    # pytorch dataset class for loading images from the DAVIS dataset
+    # with a specified frame gap between input and output frames
+    def __init__(self, dataset_path, subdir, res, method, use_flow=False, train=True, frame_steps=[1]):
+        super().__init__(dataset_path, subdir, res, method, use_flow, train)
+        self.frame_steps = frame_steps
+
+        for vid in self.vid_labels:
+            for step in self.frame_steps:
+                assert self.vid_lengths[vid] - (step - 1) > 0
+            self.vid_lengths[vid] += 1
+
+    def __len__(self):
+        length = 0
+        for step in self.frame_steps:
+            for vid in self.vid_labels:
+                length += self.vid_lengths[vid] - step
+        return length
+
+    def __idx_to_vid__(self, idx):
+        for step in self.frame_steps:
+            for vid in self.vid_labels:
+                if idx < self.vid_lengths[vid] - step:
+                    return vid, idx, step
+                else:
+                    idx -= self.vid_lengths[vid] - step
+        raise IndexError('Index out of range')
+
+    def __getitem__(self, idx, verbose=False):
+        vid_label, frame_idx, step = self.__idx_to_vid__(idx)
+        frame_idx += step
+
+        col_dir = os.path.join(self.col_dir, vid_label)
+        gray_dir = os.path.join(self.gray_dir, vid_label)
+        flow_dir = os.path.join(self.flow_dir, vid_label)
+        if step != 1:
+            flow_dir = os.path.join(self.flow_dir + '_step_' + str(step), vid_label)
+
+        col_frame = os.path.join(col_dir, str(frame_idx).zfill(5) + '.jpg')
+        col_prev_frame = os.path.join(col_dir, str(frame_idx - step).zfill(5) + '.jpg')
+        gray_frame = os.path.join(gray_dir, str(frame_idx).zfill(5) + '.jpg')
+        flow_frame = os.path.join(flow_dir, str(frame_idx).zfill(5) + '.jpg.npy')
+
+        if verbose:
+            print('col_frame: {}'.format(col_frame))
+            print('gray_frame: {}'.format(gray_frame))
+            print('flow_frame: {}'.format(flow_frame))
+
+        col_img = imread(col_frame)
+        col_prev_img = imread(col_prev_frame)
+        gray_img = imread(gray_frame)
+        flow_img = np.load(flow_frame)
+
+        sample = {
+            'col_img': col_img,
+            'col_prev_img': col_prev_img,
+            'gray_img': gray_img,
+            'flow_img': flow_img
+        }
+
+        col_img, col_prev_img, gray_img, flow_img = images_to_tensor(sample)
+        col_img, col_prev_img, gray_img, flow_img = images_normalize(col_img, col_prev_img, gray_img, flow_img)
+        input = self.__input_concat__(col_prev_img, gray_img, flow_img)
+        output = self.__target_concat__(col_img)
+        input = torch.transpose(input, 0, 2)
+        output = torch.transpose(output, 0, 2)
+
+        return input, output
+
 
 def data_to_images(input, output, use_flow=False, input_only=False):
     # create viewable rgb images from NN input and output tensors
@@ -197,19 +272,19 @@ def data_to_images(input, output, use_flow=False, input_only=False):
     else:
         col_img = input.numpy()[:, :, 0:3]
         grey_img = input.numpy()[:, :, 3:4]
-    
-    col_img  = (col_img*255).astype(np.uint8)
-    col_image = cv2.cvtColor(col_img, cv2.COLOR_LAB2BGR)
+
+    col_img = (col_img * 255).astype(np.uint8)
+    col_image = cv2.cvtColor(col_img, cv2.COLOR_LAB2RGB)
 
     if not input_only:
         output = output.numpy()
-        output = (output*255).astype(np.uint8)
+        output = (output * 255).astype(np.uint8)
         lab = np.zeros((grey_img.shape[0], grey_img.shape[1], 3))
-        lab[:,:,0] = grey_img[:,:,0]*255
-        lab[:,:,1] = output[:,:,0]
-        lab[:,:,2] = output[:,:,1]
+        lab[:, :, 0] = grey_img[:, :, 0] * 255
+        lab[:, :, 1] = output[:, :, 0]
+        lab[:, :, 2] = output[:, :, 1]
         lab = lab.astype(np.uint8)
-        pred_rgb = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
+        pred_rgb = cv2.cvtColor(lab, cv2.COLOR_LAB2RGB)
 
     if input_only:
         if use_flow:
@@ -225,11 +300,11 @@ def data_to_images(input, output, use_flow=False, input_only=False):
 
 def images_to_data(col_img, flow_img, gray_img):
     sample = {
-            'col_img': col_img,
-            'col_prev_img': col_img,
-            'gray_img': gray_img,
-            'flow_img': flow_img
-        }
+        'col_img': col_img,
+        'col_prev_img': col_img,
+        'gray_img': gray_img,
+        'flow_img': flow_img
+    }
 
     col_img, col_prev_img, gray_img, flow_img = images_to_tensor(sample)
     col_img, col_prev_img, gray_img, flow_img = images_normalize(col_img, col_prev_img, gray_img, flow_img)
