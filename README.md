@@ -1,6 +1,6 @@
 # film_Colorization
 
-Dataset has to be [donwloaded](https://davischallenge.org/davis2017/code.html) separately.
+Dataset has to be [downloaded](https://davischallenge.org/davis2017/code.html) separately.
 
 ## Contents:
 [dataset_preparation.ipynb](dataset_preparation.ipynb):
